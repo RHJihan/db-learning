@@ -533,4 +533,168 @@ test=# SELECT * FROM person WHERE id = 3;
 (1 row)
 ```
 
+# CREATE FUNCTION
+CREATE FUNCTION defines a new function. CREATE OR REPLACE FUNCTION will either create a new function, or replace an existing definition. To be able to define a function, the user must have the USAGE privilege on the language.
 
+If a schema name is included, then the function is created in the specified schema. Otherwise it is created in the current schema. The name of the new function must not match any existing function or procedure with the same input argument types in the same schema. However, functions and procedures of different argument types can share a name (this is called overloading).
+
+``` sql
+CREATE FUNCTION get_customers_by_country(p_country_of_birth varchar)
+ RETURNS TABLE(first_name varchar, last_name varchar)
+ LANGUAGE SQL
+ AS $$
+     SELECT first_name, last_name
+     FROM person
+     WHERE country_of_birth = p_country_of_birth;
+ $$;
+```
+output:
+``` sql
+SELECT * FROM get_customers_by_country('Russia');
++------------+-------------+
+| first_name | last_name   |
+|------------+-------------|
+| Tyson      | Becraft     |
+| Ruggiero   | MacMarcuis  |
+| Bird       | Leynham     |
+| Gnni       | Bound       |
+| Bessie     | Josephi     |
+| Celle      | McNeice     |
+| Hillary    | Woodrup     |
+| Brigitta   | Stoving     |
+| Jocko      | Elvin       |
+| Donni      | Bourgourd   |
+| Catherine  | Gorse       |
+| Val        | Kirkam      |
+| Lenna      | Zambonini   |
+| Kerby      | Warlaw      |
+| Vassily    | Gillie      |
+| Jilli      | McCrillis   |
+| Kelcey     | Iacopini    |
+(more)
+```
+
+# CREATE TRIGGER
+CREATE TRIGGER creates a new trigger. CREATE OR REPLACE TRIGGER will either create a new trigger, or replace an existing trigger. The trigger will be associated with the specified table, view, or foreign table and will execute the specified function function_name when certain operations are performed on that table.
+
+To replace the current definition of an existing trigger, use CREATE OR REPLACE TRIGGER, specifying the existing trigger's name and parent table. All other properties are replaced.
+
+Here's a simple PostgreSQL TRIGGER example for your person table — let’s say you want to log whenever a new person is inserted into the table.
+
+Create a logging table
+``` sql
+CREATE TABLE person_log (
+     log_id serial PRIMARY KEY,
+     person_id int,
+     action varchar(20),
+     log_time timestamp DEFAULT current_timestamp
+ );
+```
+
+Create a trigger function
+``` sql
+CREATE FUNCTION log_person_insert()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ AS $$
+ BEGIN
+     INSERT INTO person_log (person_id, action)
+     VALUES (NEW.id, 'INSERT');
+     RETURN NEW;
+ END;
+ $$;
+```
+Create the trigger on the person table
+``` sql
+CREATE TRIGGER trg_log_person_insert
+ AFTER INSERT ON person
+ FOR EACH ROW
+ EXECUTE FUNCTION log_person_insert();
+CREATE TRIGGER
+```
+``` sql 
+INSERT INTO person (
+     first_name, 
+     last_name, 
+     email, 
+     gender, 
+     date_of_birth, 
+     country_of_birth
+ ) VALUES (
+     'Test', 
+     'User', 
+     'test@example.com', 
+     'Other', 
+     '1990-01-01', 
+     'Testland'
+ );
+```
+``` sql
+SELECT * FROM person_log;
++--------+-----------+--------+----------------------------+
+| log_id | person_id | action | log_time                   |
+|--------+-----------+--------+----------------------------|
+| 1      | 1001      | INSERT | 2025-06-18 11:37:45.969819 |
++--------+-----------+--------+----------------------------+
+SELECT 1
+```
+
+# Transactions
+Transactions are a fundamental concept of all database systems. The essential point of a transaction is that it bundles multiple steps into a single, all-or-nothing operation. The intermediate states between the steps are not visible to other concurrent transactions, and if some failure occurs that prevents the transaction from completing, then none of the steps affect the database at all.
+
+``` sql
+test> BEGIN;
+ INSERT INTO person (
+     first_name, last_name, email, gender, date_of_birth, country_of_birth
+ ) VALUES (
+     'Bob', 'Jones', 'bob.jones@example.com', 'Male', '1988-02-20', 'USA'
+ );
+ INSERT INTO does_not_exists VALUES (1);
+ COMMIT;
+BEGIN
+INSERT 0 1
+relation "does_not_exists" does not exist
+LINE 1: INSERT INTO does_not_exists VALUES (1)
+                    ^
+test> SELECT * FROM person where first_name='Bob'
+current transaction is aborted, commands ignored until end of transaction block
+```
+Now You cannot run any more commands inside this failed transaction except ROLLBACK.
+
+``` sql
+test> ROLLBACK;
+ROLLBACK
+test> SELECT * FROM person where first_name='Bob'
++----+------------+-----------+-------+--------+---------------+------------------+
+| id | first_name | last_name | email | gender | date_of_birth | country_of_birth |
+|----+------------+-----------+-------+--------+---------------+------------------|
++----+------------+-----------+-------+--------+---------------+------------------+
+SELECT 0
+```
+
+# Indexes
+Indexes are a common way to enhance database performance. An index allows the database server to find and retrieve specific rows much faster than it could do without an index. But indexes also add overhead to the database system as a whole, so they should be used sensibly.
+
+## Single-column Index
+``` sql
+CREATE INDEX idx_person_email ON person(email);
+```
+## Multi-column Index
+``` sql
+CREATE INDEX idx_person_fullname ON person(first_name, last_name);
+```
+
+Check Existing Indexes:
+``` sql
+SELECT indexname, indexdef 
+ FROM pg_indexes 
+ WHERE tablename = 'person';
++------------------+--------------------------------------------------------------------+
+| indexname        | indexdef                                                           |
+|------------------+--------------------------------------------------------------------|
+| person_pkey      | CREATE UNIQUE INDEX person_pkey ON public.person USING btree (id)  |
+| idx_person_email | CREATE INDEX idx_person_email ON public.person USING btree (email) |
++------------------+--------------------------------------------------------------------+
+SELECT 2
+
+```
